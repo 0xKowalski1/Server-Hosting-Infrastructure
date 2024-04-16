@@ -30,6 +30,8 @@ resource "google_compute_instance" "vm_instance" {
     }
   }
 
+  metadata_startup_script = file("${path.module}/control-node-startup.sh")
+
   scheduling {
     preemptible       = true
     automatic_restart = false
