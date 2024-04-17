@@ -1,5 +1,7 @@
 #!/bin/bash
 
+touch /home/ubuntu/startup-running
+
 # Update the system
 sudo apt-get update
 
@@ -38,84 +40,31 @@ EOF
 # Restart etcd with new settings
 sudo systemctl restart etcd
 
-# Install containerd
-sudo apt-get install -y containerd
-
-# Configure containerd to use CNI
-sudo mkdir -p /etc/containerd
-cat <<EOF | sudo tee /etc/containerd/config.toml
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
-  SystemdCgroup = true
-
-[plugins."io.containerd.grpc.v1.cri".cni]
-  bin_dir = "/opt/cni/bin"
-  conf_dir = "/etc/cni/net.d"
-EOF
-
-# Install CNI plugins
-wget https://github.com/containernetworking/plugins/releases/download/v1.0.1/cni-plugins-linux-amd64-v1.0.1.tgz
-sudo mkdir -p /opt/cni/bin
-sudo tar -xzvf cni-plugins-linux-amd64-v1.0.1.tgz -C /opt/cni/bin
-
-# Configure CNI networking
-sudo mkdir -p /etc/cni/net.d
-cat <<EOF | sudo tee /etc/cni/net.d/10-mynet.conflist
+# Create config.json 
+cat <<EOF >/home/ubuntu/config.json
 {
-  "cniVersion": "1.0.0",
-  "name": "mynet",
-  "plugins": [
-    {
-      "type": "bridge",
-      "bridge": "cni0",
-      "isGateway": true,
-      "ipMasq": true,
-      "ipam": {
-        "type": "host-local",
-        "subnet": "10.22.0.0/16",
-        "routes": [
-          { "dst": "0.0.0.0/0" }
-        ]
-      }
-    },
-    {
-      "type": "portmap",
-      "capabilities": {
-        "portMappings": true
-      },
-      "snat": true
-    }
-  ]
+  "namespace": "development",
+  "nodeIp": "",
+  "controlNodeIp": "",
+  "containerdSocketPath": "",
+  "storagePath": "",
+  "cniPath": "",
+  "networkConfigPath": "",
+  "networkConfigFileName": "",
+  "networkNamespacePath": "",
+  "logPath": ""
 }
 EOF
 
-# Ensure containerd and CNI are set up properly
-sudo systemctl restart containerd
+# URL for the control-node binary from GitHub Releases
+CONTROL_NODE_URL="https://github.com/0xKowalski1/container-orchestrator/releases/download/v0.0.1/control-node"
 
-# Install Docker
-sudo apt-get install -y docker.io
-sudo systemctl start docker
-sudo systemctl enable docker
+# Use wget to download the binary
+wget $CONTROL_NODE_URL -O /home/ubuntu/control-node
 
-# Deploy a Docker registry on port 5000
-sudo docker run -d -p 5000:5000 --restart=always --name registry registry:2
+# Make the downloaded binary executable
+chmod +x /home/ubuntu/control-node
 
-# Get container orchestrator
-cd /home/ubuntu/
-git clone https://github.com/0xKowalski1/container-orchestrator.git
+echo "control-node downloaded and set as executable."
 
-# Push minecraft to registry
-cd /home/ubuntu/container-orchestrator/container-examples/minecraft
-sh pushToRegistry.sh
-
-cd /home/ubuntu/container-orchestrator
-# Change config & create mounts/logs dirs
-mkdir -p mounts logs
-sudo apt-get update && sudo apt-get install -y jq
-
-# Update the config.json with correct paths using jq
-jq '.storagePath = "/home/ubuntu/container-orchestrator/mounts/" |
-    .logPath = "/home/ubuntu/container-orchestrator/logs/" |
-    .cniPath = "/opt/cni/bin"' config.json > temp.json && mv temp.json config.json
-
-# Reset network, should not have to do this
-sh fullReset.sh
+rm /home/ubuntu/startup-running
