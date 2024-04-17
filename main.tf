@@ -18,7 +18,7 @@ resource "google_compute_firewall" "allow_traffic" {
 
   allow {
     protocol = "tcp"
-    ports    = ["5000", "8080", "8081"]
+    ports    = ["22", "5000", "8080", "8081"]
   }
 
   allow {
@@ -45,7 +45,7 @@ resource "google_compute_instance" "control_node" {
 
   boot_disk {
     initialize_params {
-      image = "ubuntu-os-cloud/ubuntu-2204-lts"
+      image = "nixos-control-node-image"
       size  = 10
     }
   }
@@ -57,7 +57,6 @@ resource "google_compute_instance" "control_node" {
     }
   }
 
-  metadata_startup_script = file("${path.module}/control-node-startup.sh")
 
 
   scheduling {
@@ -74,7 +73,7 @@ resource "google_compute_instance" "worker_node" {
 
   boot_disk {
     initialize_params {
-      image = "ubuntu-os-cloud/ubuntu-2204-lts"
+      image = "nixos-worker-node-image"
       size  = 20
     }
   }
@@ -86,13 +85,14 @@ resource "google_compute_instance" "worker_node" {
     }
   }
 
-  depends_on = [google_compute_instance.control_node]
-  metadata_startup_script = templatefile("${path.module}/worker-node-startup.sh", {
-    CONTROL_NODE_EXTERNAL_IP = google_compute_instance.control_node.network_interface[0].access_config[0].nat_ip
-  })
 
   scheduling {
     preemptible       = true
     automatic_restart = false
   }
 }
+
+output "worker_node_external_ip" {
+  value = google_compute_instance.worker_node.network_interface[0].access_config[0].nat_ip
+}
+
